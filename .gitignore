@@ -1,0 +1,11 @@
+# Python e notebooks
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.venv/
+venv/
+.vscode/
+
+# Dados baixados da Câmara (o notebook baixa de novo o que faltar); o cache de cores dos logos fica versionado
+data/*.csv
+data/*.part

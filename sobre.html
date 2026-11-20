@@ -1,0 +1,137 @@
+<!-- Página "Sobre o método" da visualização (lida pelo notebook e embutida no camara.html).
+     Marcadores {{...}} são preenchidos pelo notebook com os parâmetros usados.
+     Fórmulas: \( ... \) no texto, $$ ... $$ em destaque (KaTeX). -->
+<h1>Como esta rede é construída</h1>
+<p class="lead">Cada ponto é um deputado federal e cada ligação indica que dois deputados votaram juntos,
+nas votações nominais do período, mais do que o esperado por acaso. Esta página descreve os dados,
+a matemática e as escolhas por trás de cada quadro.</p>
+
+<h2>1. Dados</h2>
+<p>Todos os dados vêm do <a href="https://dadosabertos.camara.leg.br/" target="_blank" rel="noopener">portal de
+Dados Abertos da Câmara dos Deputados</a>, nos arquivos anuais em CSV:</p>
+<table>
+  <tr><th>Arquivo</th><th>Uso</th></tr>
+  <tr><td><code>votacoesVotos</code></td><td>voto de cada deputado em cada votação nominal</td></tr>
+  <tr><td><code>votacoes</code></td><td>data, órgão, descrição e resultado de cada votação</td></tr>
+  <tr><td><code>votacoesProposicoes</code></td><td>proposições afetadas por cada votação</td></tr>
+  <tr><td><code>proposicoesTemas</code></td><td>temas de cada proposição (classificação da Câmara)</td></tr>
+  <tr><td>API <code>/partidos</code></td><td>logos dos partidos (usados para as cores)</td></tr>
+</table>
+<ul>
+  <li><strong>Período:</strong> {{PERIODO}}. Antes de 2003 os dados abertos quase não têm votos individuais.</li>
+  <li><strong>Só votações nominais:</strong> votações simbólicas não registram o voto de cada deputado e ficam de fora.</li>
+  <li><strong>Comissões:</strong> as votações de comissões só têm o voto de cada deputado a partir de 2020; antes disso,
+  os quadros refletem apenas o Plenário.</li>
+  <li><strong>Deputados:</strong> identificados pelo id da Câmara. Deputados diferentes com o mesmo nome recebem o ano do
+  primeiro voto (ex.: “Ricardo Izar (2011)”).</li>
+  <li><strong>Partidos:</strong> partidos que só mudaram de nome aparecem com o nome atual (PFL → DEM, PMDB → MDB, PR → PL…);
+  fusões e incorporações não são unidas. O partido de um deputado num quadro é o do seu último voto no período.</li>
+</ul>
+
+<h2>2. Quadros: escala, tema e período</h2>
+<p>A visualização tem um grafo para cada combinação de <strong>escala</strong> (ano ou legislatura),
+<strong>tema</strong> e <strong>período</strong>.</p>
+<ul>
+  <li><strong>Legislatura:</strong> quatro anos a partir de 1º de fevereiro (a 52ª vai de fev/2003 a jan/2007).</li>
+  <li><strong>Ano:</strong> ano legislativo, de fevereiro a janeiro, para que cada ano caiba inteiro numa legislatura.</li>
+  <li><strong>Tema:</strong> uma votação pertence a um tema quando alguma das proposições que ela afeta tem esse tema.
+  Uma votação pode ter vários temas. A linha “Geral” usa todas as votações.</li>
+  <li>Quadros com menos de {{MIN_VOTACOES}} votações mostram os deputados, mas sem ligações.</li>
+</ul>
+
+<h2>3. Concordância além do acaso</h2>
+<p>Considere só os votos <strong>Sim</strong> e <strong>Não</strong>. Numa votação \(v\), seja \(n_v\) o número de
+deputados que votaram e \(c_{v,o}\) o número dos que escolheram a opção \(o\).</p>
+
+<h3>Modelo nulo</h3>
+<p>Para saber se dois deputados concordam “mais do que o esperado”, comparamos com um mundo hipotético em que, em cada
+votação, quem votou e o placar ficam iguais, mas os votos são <em>embaralhados</em> entre os presentes. Nesse modelo,
+dois deputados presentes concordam por acaso com probabilidade</p>
+$$q_v = \sum_{o \in \{\text{Sim},\,\text{Não}\}} \frac{c_{v,o}\,(c_{v,o}-1)}{n_v\,(n_v-1)}.$$
+<p>Votações unânimes têm \(q_v = 1\) e não dizem nada sobre afinidade; as disputadas (placar perto de 50%) é que pesam.
+O resultado também não depende de qual lado da votação é chamado de “Sim”.</p>
+
+<h3>Concordância de um par</h3>
+<p>Para os deputados \(i\) e \(j\), sejam \(N_{ij}\) o número de votações em que ambos votaram,
+\(A_{ij}\) o número delas em que votaram igual e \(E_{ij}\) o número esperado pelo modelo nulo:</p>
+$$E_{ij} = \sum_{v \,:\, i,\,j \text{ votaram}} q_v .$$
+<p>A <strong>concordância além do acaso</strong> é uma medida do tipo kappa de Cohen:</p>
+$$\kappa_{ij} = \frac{A_{ij} - E_{ij}}{N_{ij} - E_{ij}} .$$
+<p>\(\kappa_{ij} = 1\) significa que os dois sempre votaram juntos; \(\kappa_{ij} = 0\), que concordaram tanto quanto o acaso;
+valores negativos, que concordaram menos. É o valor mostrado em cada ligação e usado no filtro “Concordância mínima”.</p>
+
+<h2>4. Evidência estatística</h2>
+<p>O número de discordâncias de um par, \(D_{ij} = N_{ij} - A_{ij}\), é sob o modelo nulo uma soma de variáveis de
+Bernoulli independentes com probabilidades \(1 - q_v\) (uma distribuição Poisson-binomial). O p-valor de
+“concordam mais do que o acaso” é</p>
+$$p_{ij} = \Pr\!\left(D \le D_{ij}^{\text{obs}}\right),$$
+<p>calculado de forma exata, por programação dinâmica, quando o par discordou poucas vezes, e pela aproximação normal
+com correção de continuidade nos demais casos (onde ela é precisa).</p>
+<p>Como cada quadro testa dezenas de milhares de pares, os p-valores são corrigidos pelo procedimento de
+Benjamini–Hochberg. Ordenando os \(m\) p-valores, \(p_{(1)} \le \dots \le p_{(m)}\), o <strong>q-valor</strong> de cada par é</p>
+$$q_{(k)} = \min_{l \ge k} \frac{m\, p_{(l)}}{l},$$
+<p>e aceitar todos os pares com \(q \le \alpha\) mantém a <em>taxa de falsas descobertas</em> (FDR) esperada em no máximo \(\alpha\).</p>
+
+<h2>5. Quais ligações aparecem</h2>
+<ul>
+  <li>Em cada quadro, os pares com \(\kappa_{ij} > 0\) são ordenados pelo p-valor, e ficam os
+  <strong>{{DENSIDADE}} dos pares com mais evidência</strong>. Com a mesma densidade em todos os quadros, eles podem ser
+  comparados entre si.</li>
+  <li>Uma ligação é <strong>significativa</strong> quando \(q_{ij} \le\) {{FDR}}. As não significativas aparecem mais
+  apagadas, e o botão “Só signif.” as esconde.</li>
+  <li>O rodapé de cada quadro mostra o <strong>FDR estimado</strong> das ligações exibidas (o q-valor da mais fraca).
+  Perto de 0%, são afinidades confiáveis; perto de 100% (quadros com poucas votações), são indistinguíveis do acaso.</li>
+  <li>Empates no corte (comuns quando há poucas votações) entram inteiros se não passarem de 1,5 vez o número alvo de ligações.</li>
+</ul>
+
+<h2>6. Comunidades</h2>
+<p>As comunidades são encontradas pelo algoritmo de Leiden, que maximiza a <strong>modularidade</strong> do grafo
+completo de concordância (todos os pares com \(\kappa_{ij} > 0\), com peso \(w_{ij} = \kappa_{ij}\)), e não só das
+ligações exibidas:</p>
+$$Q = \frac{1}{2W} \sum_{i,j} \left( w_{ij} - \frac{s_i\, s_j}{2W} \right) \delta(g_i, g_j),$$
+<p>onde \(s_i = \sum_j w_{ij}\) é a força do deputado \(i\), \(W\) a soma de todos os pesos e \(\delta(g_i, g_j) = 1\) quando
+os dois estão na mesma comunidade. \(Q\) alto indica um plenário dividido em blocos que votam juntos.</p>
+<p>Para a cor de um bloco se manter na linha do tempo, cada comunidade herda o número da comunidade do quadro anterior
+com que compartilha mais deputados; as novas recebem os menores números livres.</p>
+
+<h2>7. Tamanho dos pontos</h2>
+<ul>
+  <li><strong>Grau:</strong> número de ligações do deputado no quadro.</li>
+  <li><strong>Intermediação</strong> (betweenness): fração dos caminhos mais curtos entre outros deputados que passa por ele, ou seja, quem faz ponte entre blocos.</li>
+  <li><strong>Proximidade</strong> (closeness): inverso da distância média até os demais deputados alcançáveis.</li>
+</ul>
+
+<h2>8. Desenho</h2>
+<p>As posições vêm do <strong>ForceAtlas2</strong>, um layout de forças: ligações atraem os deputados (com força
+proporcional à concordância) e todos se repelem, de modo que blocos que votam juntos se agrupam. O layout roda no navegador
+e continua a partir das posições atuais ao trocar de quadro; os parâmetros podem ser ajustados em ⚙. As posições iniciais
+vêm de um layout de Fruchterman–Reingold sobre a união de todos os quadros.</p>
+<p>Cada partido tem uma cor tirada da cor dominante do seu logo, ajustada no espaço de cor perceptual OKLab para que
+partidos diferentes fiquem distinguíveis nos temas claro e escuro.</p>
+
+<h2>Referências</h2>
+<ol class="refs">
+  <li>Câmara dos Deputados. <em>Dados Abertos da Câmara dos Deputados</em>.
+    <a href="https://dadosabertos.camara.leg.br/" target="_blank" rel="noopener">dadosabertos.camara.leg.br</a>.</li>
+  <li>J. Cohen. A coefficient of agreement for nominal scales. <em>Educational and Psychological Measurement</em> 20(1), 1960.</li>
+  <li>Y. Benjamini, Y. Hochberg. Controlling the false discovery rate: a practical and powerful approach to multiple testing.
+    <em>Journal of the Royal Statistical Society B</em> 57(1), 1995.</li>
+  <li>Z. Neal. The backbone of bipartite projections: inferring relationships from co-authorship, co-sponsorship,
+    co-attendance and other co-behaviors. <em>Social Networks</em> 39, 2014.</li>
+  <li>F. Saracco, M. J. Straka, R. Di Clemente, A. Gabrielli, G. Caldarelli, T. Squartini. Inferring monopartite projections
+    of bipartite networks: an entropy-based approach. <em>New Journal of Physics</em> 19, 2017.</li>
+  <li>M. E. J. Newman. Modularity and community structure in networks. <em>PNAS</em> 103(23), 2006.</li>
+  <li>V. A. Traag, L. Waltman, N. J. van Eck. From Louvain to Leiden: guaranteeing well-connected communities.
+    <em>Scientific Reports</em> 9, 2019.</li>
+  <li>M. Jacomy, T. Venturini, S. Heymann, M. Bastian. ForceAtlas2, a continuous graph layout algorithm for handy network
+    visualization designed for the Gephi software. <em>PLoS ONE</em> 9(6), 2014.</li>
+  <li>T. M. J. Fruchterman, E. M. Reingold. Graph drawing by force-directed placement.
+    <em>Software: Practice and Experience</em> 21(11), 1991.</li>
+  <li>B. Ottosson. A perceptual color space for image processing (OKLab), 2020.</li>
+</ol>
+<p class="note">Ferramentas: <a href="https://igraph.org/" target="_blank" rel="noopener">igraph</a> (grafos e Leiden),
+pandas e NumPy (dados), <a href="https://www.sigmajs.org/" target="_blank" rel="noopener">Sigma.js</a> e
+<a href="https://graphology.github.io/" target="_blank" rel="noopener">Graphology</a> (visualização),
+<a href="https://katex.org/" target="_blank" rel="noopener">KaTeX</a> (fórmulas).
+Código: <a href="https://github.com/LucasAlegre/camara-em-rede" target="_blank" rel="noopener">github.com/LucasAlegre/camara-em-rede</a>.
+Página gerada em {{GERADO_EM}}.</p>

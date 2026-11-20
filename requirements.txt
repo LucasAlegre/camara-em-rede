@@ -1,0 +1,7 @@
+pandas
+numpy
+scipy
+python-igraph
+requests
+Pillow
+jupyter
